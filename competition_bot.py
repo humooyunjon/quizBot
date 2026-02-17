@@ -6,12 +6,11 @@ import threading
 import os
 import logging
 
-# Loglarni sozlash (Xatolarni kuzatish uchun)
+# Loglarni sozlash
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 1. Token xavfsizligi
-# Railway'da Variables bo'limiga TOKEN qo'shing. Agar topilmasa, pastdagi string ishlaydi.
+# 1. Token xavfsizligi (Railway Variables'dan o'qiydi)
 TOKEN = os.environ.get('TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
@@ -47,24 +46,23 @@ user_scores = {}
 poll_data = {} 
 game_running = False
 
-def is_admin(chat_id, user_id):
-    """Faqat adminlar buyruq bera olishini tekshirish"""
-    try:
-        admins = bot.get_chat_administrators(chat_id)
-        return any(admin.user.id == user_id for admin in admins)
-    except:
-        return False
+# Ruxsat berilgan ID-lar ro'yxati
+ALLOWED_USERS = [8203475096, 8293628286]
+
+def is_allowed(user_id):
+    """Faqat ma'lum ID-ga ega foydalanuvchilarga ruxsat berish"""
+    return user_id in ALLOWED_USERS
 
 @bot.message_handler(commands=['start_test'])
 def start_game(message):
     global game_running, user_scores, poll_data
     
-    if message.chat.type == 'private':
-        bot.send_message(message.chat.id, "❌ Bu buyruq faqat guruhda ishlaydi!")
+    if not is_allowed(message.from_user.id):
+        bot.reply_to(message, "⚠️ Sizda ushbu testni boshlash huquqi yo'q.")
         return
 
-    if not is_admin(message.chat.id, message.from_user.id):
-        bot.send_message(message.chat.id, "⚠️ Faqat adminlar testni boshlay oladi.")
+    if message.chat.type == 'private':
+        bot.send_message(message.chat.id, "❌ Bu buyruq faqat guruhda ishlaydi!")
         return
 
     if game_running:
@@ -83,13 +81,14 @@ def start_game(message):
 @bot.message_handler(commands=['stop'])
 def stop_game(message):
     global game_running
-    if not is_admin(message.chat.id, message.from_user.id):
-        bot.send_message(message.chat.id, "⚠️ Faqat adminlar o'yinni to'xtata oladi.")
+    
+    if not is_allowed(message.from_user.id):
+        bot.reply_to(message, "⚠️ Sizda o'yinni to'xtatish huquqi yo'q.")
         return
 
     if game_running:
         game_running = False
-        bot.send_message(message.chat.id, "🛑 O'yin to'xtatildi.")
+        bot.send_message(message.chat.id, "🛑 O'yin administrator tomonidan to'xtatildi.")
         finish_game(message.chat.id)
     else:
         bot.send_message(message.chat.id, "Hozir hech qanday o'yin ketmayapti.")
@@ -128,7 +127,7 @@ def run_quiz_loop(chat_id):
                 time.sleep(1)
             
         except Exception as e:
-            logger.error(f"Poll yuborishda xatolik: {e}")
+            logger.error(f"Poll xatosi: {e}")
             continue
 
     if game_running:
@@ -183,5 +182,4 @@ def finish_game(chat_id):
 
 if __name__ == "__main__":
     logger.info("Bot ishga tushdi...")
-    # Tarmoq uzilsa avtomatik qayta ulanish (Infinity Polling)
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
