@@ -64,7 +64,7 @@ def start_game(message):
     # Har bir chat uchun alohida chat_type uzatiladi
     threading.Thread(target=run_quiz_loop, args=(message.chat.id, message.chat.type)).start()
 
-@bot.message_handler(commands=['stop'])
+@bot.message_handler(commands=['stopit'])
 def stop_game(message):
     global game_running
     if game_running:
