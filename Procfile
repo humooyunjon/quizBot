@@ -1,0 +1,1 @@
+worker: python competition_bot.py
