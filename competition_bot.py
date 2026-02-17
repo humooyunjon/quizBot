@@ -10,11 +10,11 @@ import logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 1. Token xavfsizligi (Railway Variables'dan o'qiydi)
+# Token Railway Variables'dan olinadi
 TOKEN = os.environ.get('TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
-# 2. So'zlar bazasi
+# So'zlar bazasi
 vocab = {
     "Culture": "Madaniyat", "Cultural diversity": "Madaniy xilma-xillik",
     "Multiculturalism": "Ko‘p madaniyatlilik", "Heritage": "Madaniy meros",
@@ -46,21 +46,11 @@ user_scores = {}
 poll_data = {} 
 game_running = False
 
-# Ruxsat berilgan ID-lar ro'yxati
-ALLOWED_USERS = [8203475096, 8293628286]
-
-def is_allowed(user_id):
-    """Faqat ma'lum ID-ga ega foydalanuvchilarga ruxsat berish"""
-    return user_id in ALLOWED_USERS
-
 @bot.message_handler(commands=['start_test'])
 def start_game(message):
     global game_running, user_scores, poll_data
     
-    if not is_allowed(message.from_user.id):
-        bot.reply_to(message, "⚠️ Sizda ushbu testni boshlash huquqi yo'q.")
-        return
-
+    # Har qanday foydalanuvchi guruhda boshlay oladi
     if message.chat.type == 'private':
         bot.send_message(message.chat.id, "❌ Bu buyruq faqat guruhda ishlaydi!")
         return
@@ -82,13 +72,10 @@ def start_game(message):
 def stop_game(message):
     global game_running
     
-    if not is_allowed(message.from_user.id):
-        bot.reply_to(message, "⚠️ Sizda o'yinni to'xtatish huquqi yo'q.")
-        return
-
+    # Har qanday foydalanuvchi to'xtata oladi
     if game_running:
         game_running = False
-        bot.send_message(message.chat.id, "🛑 O'yin administrator tomonidan to'xtatildi.")
+        bot.send_message(message.chat.id, "🛑 O'yin to'xtatildi.")
         finish_game(message.chat.id)
     else:
         bot.send_message(message.chat.id, "Hozir hech qanday o'yin ketmayapti.")
