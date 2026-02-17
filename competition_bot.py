@@ -3,9 +3,16 @@ from telebot import types
 import random
 import time
 import threading
+import os
+import logging
 
-# 1. O'z tokeningizni qo'ying
-TOKEN = '8227991509:AAED-PzSMDZqlDK_hSMGdNvlYputCpDDn4A'
+# Loglarni sozlash (Xatolarni kuzatish uchun)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# 1. Token xavfsizligi
+# Railway'da Variables bo'limiga TOKEN qo'shing. Agar topilmasa, pastdagi string ishlaydi.
+TOKEN = os.environ.get('TOKEN', '8227991509:AAED-PzSMDZqlDK_hSMGdNvlYputCpDDn4A')
 bot = telebot.TeleBot(TOKEN)
 
 # 2. So'zlar bazasi
@@ -36,10 +43,17 @@ vocab = {
     "Cultural heritage site": "Madaniy meros obyekti"
 }
 
-# O'yin holati va ma'lumotlar
 user_scores = {}
 poll_data = {} 
 game_running = False
+
+def is_admin(chat_id, user_id):
+    """Faqat adminlar buyruq bera olishini tekshirish"""
+    try:
+        admins = bot.get_chat_administrators(chat_id)
+        return any(admin.user.id == user_id for admin in admins)
+    except:
+        return False
 
 @bot.message_handler(commands=['start_test'])
 def start_game(message):
@@ -47,6 +61,10 @@ def start_game(message):
     
     if message.chat.type == 'private':
         bot.send_message(message.chat.id, "❌ Bu buyruq faqat guruhda ishlaydi!")
+        return
+
+    if not is_admin(message.chat.id, message.from_user.id):
+        bot.send_message(message.chat.id, "⚠️ Faqat adminlar testni boshlay oladi.")
         return
 
     if game_running:
@@ -57,7 +75,7 @@ def start_game(message):
     user_scores = {} 
     poll_data = {}
     
-    bot.send_message(message.chat.id, "📢 <b>QUIZ BOSHLANDI!</b>\n\n50 ta savol, har biri 10 soniya.\nNatijalarda ball va sarflangan vaqt hisobga olinadi.\nTayyorlaning...", parse_mode="HTML")
+    bot.send_message(message.chat.id, "📢 <b>QUIZ BOSHLANDI!</b>\n\n50 ta savol, har biri 10 soniya.\nTayyorlaning...", parse_mode="HTML")
     time.sleep(3)
     
     threading.Thread(target=run_quiz_loop, args=(message.chat.id,)).start()
@@ -65,10 +83,13 @@ def start_game(message):
 @bot.message_handler(commands=['stop'])
 def stop_game(message):
     global game_running
+    if not is_admin(message.chat.id, message.from_user.id):
+        bot.send_message(message.chat.id, "⚠️ Faqat adminlar o'yinni to'xtata oladi.")
+        return
+
     if game_running:
-        game_running = False # Tsiklni to'xtatish uchun signal
-        bot.send_message(message.chat.id, "🛑 O'yin administrator tomonidan to'xtatildi.")
-        # To'xtatilgan vaqtdagi natijalarni ko'rsatamiz
+        game_running = False
+        bot.send_message(message.chat.id, "🛑 O'yin to'xtatildi.")
         finish_game(message.chat.id)
     else:
         bot.send_message(message.chat.id, "Hozir hech qanday o'yin ketmayapti.")
@@ -80,9 +101,7 @@ def run_quiz_loop(chat_id):
     random.shuffle(items)
     
     for index, (english, uzbek) in enumerate(items, 1):
-        # Har bir savoldan oldin o'yin to'xtatilganini tekshiramiz
-        if not game_running: 
-            return
+        if not game_running: return
         
         all_translations = list(vocab.values())
         wrong_options = random.sample([t for t in all_translations if t != uzbek], 3)
@@ -104,13 +123,12 @@ def run_quiz_loop(chat_id):
             
             poll_data[poll_msg.poll.id] = correct_id
             
-            # 10 soniya kutish (o'yin to'xtatilishini tez-tez tekshirish uchun qisqa kutishlar)
             for _ in range(10):
                 if not game_running: return
                 time.sleep(1)
             
         except Exception as e:
-            print(f"Xatolik: {e}")
+            logger.error(f"Poll yuborishda xatolik: {e}")
             continue
 
     if game_running:
@@ -143,7 +161,6 @@ def handle_poll_answer(poll_answer):
         user_scores[user_id]["last_time"] = current_time
 
 def finish_game(chat_id):
-    # Agar hech kim javob bermagan bo'lsa natija chiqarmaymiz
     if not user_scores:
         bot.send_message(chat_id, "🏆 <b>Natijalar:</b>\nHech kim qatnashmadi.", parse_mode="HTML")
         return
@@ -160,10 +177,11 @@ def finish_game(chat_id):
         minutes = duration // 60
         seconds = duration % 60
         time_display = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
-        
         leaderboard += f"{i}. {player['name']} — {player['score']} ball ({time_display})\n"
             
     bot.send_message(chat_id, leaderboard, parse_mode="HTML")
 
-print("Bot ishga tushdi...")
-bot.infinity_polling()
+if __name__ == "__main__":
+    logger.info("Bot ishga tushdi...")
+    # Tarmoq uzilsa avtomatik qayta ulanish (Infinity Polling)
+    bot.infinity_polling(timeout=10, long_polling_timeout=5)
