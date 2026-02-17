@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # 1. Token xavfsizligi
 # Railway'da Variables bo'limiga TOKEN qo'shing. Agar topilmasa, pastdagi string ishlaydi.
-TOKEN = os.environ.get('TOKEN', '8227991509:AAED-PzSMDZqlDK_hSMGdNvlYputCpDDn4A')
+TOKEN = os.environ.get('TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
 # 2. So'zlar bazasi
