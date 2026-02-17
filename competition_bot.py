@@ -66,8 +66,10 @@ def start_game(message):
 def stop_game(message):
     global game_running
     if game_running:
-        game_running = False
-        bot.send_message(message.chat.id, "🛑 O'yin to'xtatildi.")
+        game_running = False # Tsiklni to'xtatish uchun signal
+        bot.send_message(message.chat.id, "🛑 O'yin administrator tomonidan to'xtatildi.")
+        # To'xtatilgan vaqtdagi natijalarni ko'rsatamiz
+        finish_game(message.chat.id)
     else:
         bot.send_message(message.chat.id, "Hozir hech qanday o'yin ketmayapti.")
 
@@ -78,7 +80,9 @@ def run_quiz_loop(chat_id):
     random.shuffle(items)
     
     for index, (english, uzbek) in enumerate(items, 1):
-        if not game_running: break
+        # Har bir savoldan oldin o'yin to'xtatilganini tekshiramiz
+        if not game_running: 
+            return
         
         all_translations = list(vocab.values())
         wrong_options = random.sample([t for t in all_translations if t != uzbek], 3)
@@ -99,7 +103,11 @@ def run_quiz_loop(chat_id):
             )
             
             poll_data[poll_msg.poll.id] = correct_id
-            time.sleep(10)
+            
+            # 10 soniya kutish (o'yin to'xtatilishini tez-tez tekshirish uchun qisqa kutishlar)
+            for _ in range(10):
+                if not game_running: return
+                time.sleep(1)
             
         except Exception as e:
             print(f"Xatolik: {e}")
@@ -122,41 +130,38 @@ def handle_poll_answer(poll_answer):
     
     current_time = time.time()
     
-    # Foydalanuvchi ma'lumotlarini yaratish
     if user_id not in user_scores:
         user_scores[user_id] = {
             "name": user_name, 
             "score": 0, 
-            "start_time": current_time, # Birinchi marta javob bergan vaqti
-            "last_time": current_time   # Oxirgi javob bergan vaqti
+            "start_time": current_time,
+            "last_time": current_time
         }
     
-    # To'g'ri javob tekshiruvi
     if selected_option == poll_data[poll_id]:
         user_scores[user_id]["score"] += 1
-        user_scores[user_id]["last_time"] = current_time # Faqat to'g'ri javobda vaqtni yangilash
+        user_scores[user_id]["last_time"] = current_time
 
 def finish_game(chat_id):
-    leaderboard = "🏆 <b>MUSOBAQA YAKUNLANDI!</b> 🏆\n\nNatijalar:\n"
+    # Agar hech kim javob bermagan bo'lsa natija chiqarmaymiz
+    if not user_scores:
+        bot.send_message(chat_id, "🏆 <b>Natijalar:</b>\nHech kim qatnashmadi.", parse_mode="HTML")
+        return
+
+    leaderboard = "🏆 <b>MUSOBAQA NATIJALARI</b> 🏆\n\n"
     
-    # Avval ball (ko'pdan kamga), keyin vaqt (kamdan ko'pga) bo'yicha saralash
     sorted_scores = sorted(
         user_scores.values(), 
         key=lambda x: (-x['score'], x['last_time'] - x['start_time'])
     )
     
-    if not sorted_scores:
-        leaderboard += "Hech kim qatnashmadi."
-    else:
-        for i, player in enumerate(sorted_scores, 1):
-            # Sarflangan vaqtni sekundlarda hisoblash
-            duration = int(player['last_time'] - player['start_time'])
-            minutes = duration // 60
-            seconds = duration % 60
-            
-            time_display = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
-            
-            leaderboard += f"{i}. {player['name']} — {player['score']} ball ({time_display})\n"
+    for i, player in enumerate(sorted_scores, 1):
+        duration = int(player['last_time'] - player['start_time'])
+        minutes = duration // 60
+        seconds = duration % 60
+        time_display = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
+        
+        leaderboard += f"{i}. {player['name']} — {player['score']} ball ({time_display})\n"
             
     bot.send_message(chat_id, leaderboard, parse_mode="HTML")
 
