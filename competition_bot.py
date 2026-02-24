@@ -65,8 +65,8 @@ def handle_ai_quiz(message):
             time.sleep(1.2)
 
     except Exception as e:
-        logger.error(f"Xatolik: {e}")
-        bot.edit_message_text("❌ Xatolik: Matn mazmunsiz yoki AI tushunmadi. Iltimos, ma'lumotga boyroq matn yuboring.", message.chat.id, sent_msg.message_id)
+        error_msg = str(e)
+        bot.edit_message_text(f"Haqiqiy xatolik: {error_msg}", message.chat.id, sent_msg.message_id)
 
 if __name__ == "__main__":
     bot.infinity_polling()
