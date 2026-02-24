@@ -5,81 +5,68 @@ import json
 import time
 import logging
 
-# Loglarni sozlash (Railway loglarida xatolarni ko'rish uchun)
+# Loglarni sozlash
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Railway Variables'dan ma'lumotlarni olish
+# Railway Variables
 TOKEN = os.environ.get('TOKEN')
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY')
 
-# Gemini AI sozlash
+# Gemini AI konfiguratsiyasi (Modelga shaxsiyat beramiz)
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash", # Tezroq va aqlliroq model
+    generation_config={"response_mime_type": "application/json"} # FAQAT JSON qaytarishni majburlash
+)
 
 bot = telebot.TeleBot(TOKEN)
 
-# AI uchun ko'rsatma (Prompt)
-PROMPT_TEMPLATE = """
-Berilgan matn asosida 5 ta ko'p variantli test savollarini tuzing. 
-Javobni FAQAT quyidagi JSON formatida qaytaring, ortiqcha tushuntirish yozmang:
-[
-  {{
-    "question": "Savol matni",
-    "options": ["A variant", "B variant", "C variant", "D variant"],
-    "correct": 0
-  }}
-]
-Matn: {text}
-"""
-
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "Salom! Men AI Quiz Generatorman. 🤖\n\nMenga biron bir mavzuda matn yuboring (kamida 50 ta belgi), men undan sizga 5 ta test tuzib beraman.")
+    bot.reply_to(message, "🚀 **Professional AI Quiz Generator v2.0**\n\nMenga istalgan matnni yuboring, men undan mukammal testlar tuzib beraman. Endi hech qanday cheklovlar yo'q!", parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: len(message.text) > 50 and not message.text.startswith('/'))
-def handle_text_to_quiz(message):
-    sent_msg = bot.reply_to(message, "🤖 Matn tahlil qilinmoqda, ozgina kutib turing...")
+@bot.message_handler(func=lambda message: not message.text.startswith('/'))
+def handle_ai_quiz(message):
+    sent_msg = bot.reply_to(message, "🧠 AI matnni tahlil qilmoqda va savollar tuzmoqda...")
     
-    try:
-        # AI ga so'rov yuborish
-        response = model.generate_content(PROMPT_TEMPLATE.format(text=message.text))
-        raw_text = response.text
-        
-        # AI javobidan faqat JSON qismini ajratib olish (xatolikni oldini olish uchun)
-        try:
-            start_index = raw_text.find('[')
-            end_index = raw_text.rfind(']') + 1
-            if start_index == -1 or end_index == 0:
-                raise ValueError("JSON topilmadi")
-            
-            json_str = raw_text[start_index:end_index]
-            quiz_data = json.loads(json_str)
-        except Exception:
-            # Agar find/rfind ishlamasa, oddiy almashtirishni sinab ko'radi
-            json_str = raw_text.replace('```json', '').replace('```', '').strip()
-            quiz_data = json.loads(json_str)
-        
-        # Jarayon muvaffaqiyatli bo'lsa, yuklanish xabarini o'chirish
-        bot.delete_message(message.chat.id, sent_msg.message_id)
-        bot.send_message(message.chat.id, f"✅ AI {len(quiz_data)} ta savol tuzdi! Marhamat:")
+    # Matn uzunligiga qarab savollar sonini belgilash
+    text_len = len(message.text)
+    q_count = 5 if text_len < 500 else 10 if text_len < 1500 else 15
 
-        # Testlarni ketma-ket yuborish
+    prompt = f"""
+    Berilgan matn asosida {q_count} ta qiziqarli va mantiqiy test savollarini tuz. 
+    Javobni FAQAT JSON formatida qaytar:
+    [
+      {{"question": "savol", "options": ["A", "B", "C", "D"], "correct": 0}}
+    ]
+    Matn: {message.text}
+    """
+
+    try:
+        # AI dan javob olish
+        response = model.generate_content(prompt)
+        
+        # Generation_config JSON majburlagani uchun to'g'ridan-to'g'ri o'qiymiz
+        quiz_data = json.loads(response.text)
+        
+        bot.delete_message(message.chat.id, sent_msg.message_id)
+        bot.send_message(message.chat.id, f"✅ Tayyor! {len(quiz_data)} ta savoldan iborat intellektual test boshlanadi.")
+
         for item in quiz_data:
             bot.send_poll(
                 chat_id=message.chat.id,
-                question=item['question'],
-                options=item['options'],
+                question=item['question'][:255], # Telegram limiti
+                options=[opt[:100] for opt in item['options'][:4]], # Telegram limiti
                 type='quiz',
-                correct_option_id=item['correct'],
+                correct_option_id=int(item['correct']),
                 is_anonymous=False
             )
-            time.sleep(1.5) # Telegram spam deb hisoblamasligi uchun
+            time.sleep(1.2)
 
     except Exception as e:
-        logger.error(f"Xatolik yuz berdi: {e}")
-        bot.edit_message_text("❌ AI javob berishda xato qildi yoki matn juda murakkab. Iltimos, boshqa matn yuborib ko'ring.", message.chat.id, sent_msg.message_id)
+        logger.error(f"Xatolik: {e}")
+        bot.edit_message_text("❌ Xatolik: Matn mazmunsiz yoki AI tushunmadi. Iltimos, ma'lumotga boyroq matn yuboring.", message.chat.id, sent_msg.message_id)
 
 if __name__ == "__main__":
-    logger.info("AI Bot ishga tushdi...")
-    bot.infinity_polling(timeout=10, long_polling_timeout=5)
+    bot.infinity_polling()
